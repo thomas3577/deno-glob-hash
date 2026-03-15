@@ -38,8 +38,9 @@ export const hashFiles = async (
       parts.push(await Deno.readFile(file));
     } else {
       const stat = await Deno.stat(file);
-      const meta =
-        `${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0}`;
+      const meta = `${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${
+        stat.mtime?.getTime() ?? 0
+      }`;
       parts.push(encoder.encode(meta));
     }
   }

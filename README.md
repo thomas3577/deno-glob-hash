@@ -2,7 +2,8 @@
 
 Compute a SHA-256 hash from files matched by glob patterns.
 
-Available as a [Deno](https://deno.com) package on [jsr.io](https://jsr.io/@dx/glob-hash).
+Available as a [Deno](https://deno.com) package on
+[jsr.io](https://jsr.io/@dx/glob-hash).
 
 ## Install
 
@@ -52,13 +53,13 @@ matched file paths or a hex-encoded SHA-256 hash.
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `include` | `string[]` | — | Glob patterns for files to hash. **Required.** |
-| `exclude` | `string[]` | `[]` | Glob patterns for files to exclude. |
-| `jail` | `string` | `"."` | Restrict access to this directory. Throws if any matched file is outside. |
-| `files` | `boolean` | `false` | Return matched file paths (relative to `jail`) instead of a hash. |
-| `content` | `boolean` | `false` | Hash file **contents** instead of metadata. More accurate, but reads every file. |
+| Option    | Type       | Default | Description                                                                      |
+| --------- | ---------- | ------- | -------------------------------------------------------------------------------- |
+| `include` | `string[]` | —       | Glob patterns for files to hash. **Required.**                                   |
+| `exclude` | `string[]` | `[]`    | Glob patterns for files to exclude.                                              |
+| `jail`    | `string`   | `"."`   | Restrict access to this directory. Throws if any matched file is outside.        |
+| `files`   | `boolean`  | `false` | Return matched file paths (relative to `jail`) instead of a hash.                |
+| `content` | `boolean`  | `false` | Hash file **contents** instead of metadata. More accurate, but reads every file. |
 
 ### Notes
 
@@ -67,8 +68,9 @@ matched file paths or a hex-encoded SHA-256 hash.
   hash reflects `size + mtime` only.
 - **Content mode** reads every matched file in full — reliable for detecting
   byte-level changes regardless of filesystem metadata.
-- All hashes are SHA-256, returned as 64-character lowercase hex strings
-  (via the built-in [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)).
+- All hashes are SHA-256, returned as 64-character lowercase hex strings (via
+  the built-in
+  [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)).
 - No third-party dependencies — only `@std/fs` and `@std/path` from the Deno
   standard library.
 

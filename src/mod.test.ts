@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertMatch, assertRejects } from "@std/assert";
-import { computeHash } from "../src/mod.ts";
+import { computeHash } from "./mod.ts";
 
 Deno.test("returns a 64-char hex hash (metadata mode)", async () => {
   const result = await computeHash({ include: ["src/**/*.ts"] });
