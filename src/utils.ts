@@ -1,5 +1,5 @@
-import { expandGlob } from "@std/fs";
-import { relative, resolve } from "@std/path";
+import { expandGlob } from '@std/fs';
+import { relative, resolve } from '@std/path';
 
 /**
  * Resolves an array of glob patterns to a deduplicated list of absolute
@@ -38,9 +38,8 @@ export const hashFiles = async (
       parts.push(await Deno.readFile(file));
     } else {
       const stat = await Deno.stat(file);
-      const meta = `${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${
-        stat.mtime?.getTime() ?? 0
-      }`;
+      const meta = `${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0
+        }`;
       parts.push(encoder.encode(meta));
     }
   }
@@ -54,10 +53,10 @@ export const hashFiles = async (
     offset += part.length;
   }
 
-  const hashBuffer = await crypto.subtle.digest("SHA-256", combined);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', combined);
   return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 };
 
 /**
@@ -71,8 +70,8 @@ export const jail = (
 ): Error | undefined => {
   if (!jailPath) return;
   for (const file of files) {
-    if (relative(jailPath, file).startsWith("..")) {
-      return new Error("Attempt to read outside the permitted path.");
+    if (relative(jailPath, file).startsWith('..')) {
+      return new Error('Attempt to read outside the permitted path.');
     }
   }
 };

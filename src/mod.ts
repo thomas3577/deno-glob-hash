@@ -1,8 +1,8 @@
-import { resolve } from "@std/path";
-import { hashFiles, jail, resolveGlobs } from "./utils.ts";
-import type { IOptions } from "./types.ts";
+import { resolve } from '@std/path';
+import { hashFiles, jail, resolveGlobs } from './utils.ts';
+import type { IOptions } from './types.ts';
 
-export type { IOptions } from "./types.ts";
+export type { IOptions } from './types.ts';
 
 /**
  * Computes a SHA-256 hash (or returns a file list) for all files matched by
@@ -18,7 +18,7 @@ export type { IOptions } from "./types.ts";
 export const computeHash = async (
   options: IOptions,
 ): Promise<string | string[]> => {
-  const jailPath = resolve(options.jail ?? ".");
+  const jailPath = resolve(options.jail ?? '.');
 
   const includes = await resolveGlobs(options.include);
   const excludes = new Set(await resolveGlobs(options.exclude ?? []));
@@ -30,14 +30,14 @@ export const computeHash = async (
   if (jailError) throw jailError;
 
   if (files.length === 0) {
-    throw new Error("No files were matched using the provided globs.");
+    throw new Error('No files were matched using the provided globs.');
   }
 
   files.sort();
 
   if (options.files) {
     // Return paths relative to the jail root.
-    const prefix = jailPath.endsWith("/") || jailPath.endsWith("\\")
+    const prefix = jailPath.endsWith('/') || jailPath.endsWith('\\')
       ? jailPath.length
       : jailPath.length + 1;
     return files.map((file) => file.substring(prefix));
