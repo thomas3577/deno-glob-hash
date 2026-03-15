@@ -14,30 +14,30 @@ deno add @dx/glob-hash
 Or import directly without installing:
 
 ```ts
-import { computeHash } from "jsr:@dx/glob-hash";
+import { computeHash } from 'jsr:@dx/glob-hash';
 ```
 
 ## Usage
 
 ```ts
-import { computeHash } from "@dx/glob-hash";
+import { computeHash } from '@dx/glob-hash';
 
 // Hash file metadata — fast (default)
 const hash = await computeHash({
-  include: ["src/**/*.ts", "**/*.json"],
-  exclude: ["deno.json"],
+  include: ['src/**/*.ts', '**/*.json'],
+  exclude: ['deno.json'],
 });
 console.log(hash); // "3b4c…" (64-char hex)
 
 // Hash file contents — accurate, reads every file
 const contentHash = await computeHash({
-  include: ["src/**/*.ts"],
+  include: ['src/**/*.ts'],
   content: true,
 });
 
 // Return matched file paths instead of a hash
 const files = await computeHash({
-  include: ["src/**/*.ts"],
+  include: ['src/**/*.ts'],
   files: true,
 });
 console.log(files); // ["src/mod.ts", "src/types.ts", "src/utils.ts"]

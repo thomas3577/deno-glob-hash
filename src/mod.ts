@@ -11,13 +11,13 @@ export type { IOptions } from './types.ts';
  * Files are resolved, deduplicated, jail-checked, and sorted before hashing
  * to ensure a stable, deterministic result.
  *
- * @param options - See {@linkcode IOptions}.
- * @returns A 64-character hex hash string, or an array of file paths
+ * @param {IOptions} options - See {@linkcode IOptions}.
+ *
+ * @returns {Promise<string | string[]>} A 64-character hex hash string, or an array of file paths
  *   (relative to `jail`) when `options.files` is `true`.
+ * @throws {Error} If any glob pattern is invalid, if file system access fails, if any file is outside the jail, or if no files are matched.
  */
-export const computeHash = async (
-  options: IOptions,
-): Promise<string | string[]> => {
+export const computeHash = async (options: IOptions): Promise<string | string[]> => {
   const jailPath = resolve(options.jail ?? '.');
 
   const includes = await resolveGlobs(options.include);
@@ -27,7 +27,9 @@ export const computeHash = async (
   const files = [...new Set(includes.filter((f) => !excludes.has(f)))];
 
   const jailError = jail(files, jailPath);
-  if (jailError) throw jailError;
+  if (jailError) {
+    throw jailError;
+  }
 
   if (files.length === 0) {
     throw new Error('No files were matched using the provided globs.');
@@ -40,6 +42,7 @@ export const computeHash = async (
     const prefix = jailPath.endsWith('/') || jailPath.endsWith('\\')
       ? jailPath.length
       : jailPath.length + 1;
+
     return files.map((file) => file.substring(prefix));
   }
 

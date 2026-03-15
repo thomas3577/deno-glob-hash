@@ -13,6 +13,23 @@
     "update": "deno outdated --update --latest"
   },
   "publish": {
-    "exclude": ["tests/"]
+    "exclude": [
+      ".github",
+      ".vscode",
+      "tests",
+      ".gitignore",
+      ".editorconfig"
+    ]
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 360,
+    "indentWidth": 2,
+    "singleQuote": true,
+    "proseWrap": "preserve",
+    "exclude": [
+      ".github",
+      ".vscode"
+    ]
   }
 }

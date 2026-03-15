@@ -4,6 +4,11 @@ import { relative, resolve } from '@std/path';
 /**
  * Resolves an array of glob patterns to a deduplicated list of absolute
  * file paths.
+ *
+ * @param {string[]} globs - An array of glob patterns to resolve.
+ *
+ * @returns {Promise<string[]>} A promise that resolves to an array of absolute file paths.
+ * @throws {Error} If any glob pattern is invalid or if file system access fails.
  */
 export const resolveGlobs = async (globs: string[]): Promise<string[]> => {
   const files: string[] = [];
@@ -24,12 +29,12 @@ export const resolveGlobs = async (globs: string[]): Promise<string[]> => {
  * per file (fast). In content mode (`useContent = true`), reads and hashes
  * the full byte content of every file (accurate).
  *
- * Returns a 64-character lowercase hex string.
+ * @param {string[]} files - Absolute file paths to hash.
+ * @param {boolean} useContent - Whether to hash file content (true) or metadata (false).
+ *
+ * @returns {string} A 64-character lowercase hex string.
  */
-export const hashFiles = async (
-  files: string[],
-  useContent: boolean,
-): Promise<string> => {
+export const hashFiles = async (files: string[], useContent: boolean): Promise<string> => {
   const encoder = new TextEncoder();
   const parts: Uint8Array[] = [];
 
@@ -38,8 +43,7 @@ export const hashFiles = async (
       parts.push(await Deno.readFile(file));
     } else {
       const stat = await Deno.stat(file);
-      const meta = `${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0
-        }`;
+      const meta = `${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0}`;
       parts.push(encoder.encode(meta));
     }
   }
@@ -63,12 +67,17 @@ export const hashFiles = async (
  * Checks that every file path lies within `jailPath`.
  * Returns an `Error` for the first violation, or `undefined` if all paths
  * are safe.
+ *
+ * @param {string[]} files - Absolute file paths to check.
+ * @param {string} jailPath - Absolute path to the jail root. If falsy, no check is performed.
+ *
+ * @returns {Error | undefined} An `Error` if any file is outside the jail, or `undefined` if all are safe.
  */
-export const jail = (
-  files: string[],
-  jailPath: string,
-): Error | undefined => {
-  if (!jailPath) return;
+export const jail = (files: string[], jailPath: string): Error | undefined => {
+  if (!jailPath) {
+    return;
+  }
+
   for (const file of files) {
     if (relative(jailPath, file).startsWith('..')) {
       return new Error('Attempt to read outside the permitted path.');
