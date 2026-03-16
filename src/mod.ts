@@ -39,9 +39,7 @@ export const computeHash = async (options: IOptions): Promise<string | string[]>
 
   if (options.files) {
     // Return paths relative to the jail root.
-    const prefix = jailPath.endsWith('/') || jailPath.endsWith('\\')
-      ? jailPath.length
-      : jailPath.length + 1;
+    const prefix = jailPath.endsWith('/') || jailPath.endsWith('\\') ? jailPath.length : jailPath.length + 1;
 
     return files.map((file) => file.substring(prefix));
   }
