@@ -1,5 +1,5 @@
 import { expandGlob } from '@std/fs';
-import { relative, resolve } from '@std/path';
+import { isAbsolute, relative, resolve } from '@std/path';
 
 /**
  * Resolves an array of glob patterns to a deduplicated list of absolute
@@ -25,9 +25,12 @@ export const resolveGlobs = async (globs: string[]): Promise<string[]> => {
 /**
  * Computes a SHA-256 hash over an array of files.
  *
- * In metadata mode (`useContent = false`), hashes `dev + ino + size + mtime`
+ * In metadata mode (`useContent = false`), hashes `path + dev + ino + size + mtime`
  * per file (fast). In content mode (`useContent = true`), reads and hashes
- * the full byte content of every file (accurate).
+ * full file bytes (accurate).
+ *
+ * To keep memory bounded for large file sets, this computes a per-file
+ * digest and folds it into a fixed-size rolling digest.
  *
  * @param {string[]} files - Absolute file paths to hash.
  * @param {boolean} useContent - Whether to hash file content (true) or metadata (false).
@@ -36,29 +39,28 @@ export const resolveGlobs = async (globs: string[]): Promise<string[]> => {
  */
 export const hashFiles = async (files: string[], useContent: boolean): Promise<string> => {
   const encoder = new TextEncoder();
-  const parts: Uint8Array[] = [];
+  let rolling = new Uint8Array(32);
 
   for (const file of files) {
+    let fileDigestBytes: Uint8Array;
+
     if (useContent) {
-      parts.push(await Deno.readFile(file));
+      const content = await Deno.readFile(file);
+      fileDigestBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', content));
     } else {
       const stat = await Deno.stat(file);
-      const meta = `${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0}`;
-      parts.push(encoder.encode(meta));
+      const meta = `${file}-${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0}`;
+      fileDigestBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(meta)));
     }
+
+    // Keep memory bounded by folding each file hash into a fixed-size rolling digest.
+    const combined = new Uint8Array(rolling.length + fileDigestBytes.length);
+    combined.set(rolling, 0);
+    combined.set(fileDigestBytes, rolling.length);
+    rolling = new Uint8Array(await crypto.subtle.digest('SHA-256', combined));
   }
 
-  // Concatenate all parts into a single buffer for a single digest call.
-  const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
-  const combined = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const part of parts) {
-    combined.set(part, offset);
-    offset += part.length;
-  }
-
-  const hashBuffer = await crypto.subtle.digest('SHA-256', combined);
-  return Array.from(new Uint8Array(hashBuffer))
+  return Array.from(rolling)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 };
@@ -73,13 +75,19 @@ export const hashFiles = async (files: string[], useContent: boolean): Promise<s
  *
  * @returns {Error | undefined} An `Error` if any file is outside the jail, or `undefined` if all are safe.
  */
-export const jail = (files: string[], jailPath: string): Error | undefined => {
+export const jail = async (files: string[], jailPath: string): Promise<Error | undefined> => {
   if (!jailPath) {
     return;
   }
 
+  const canonicalJailPath = await Deno.realPath(jailPath);
+
   for (const file of files) {
-    if (relative(jailPath, file).startsWith('..')) {
+    const canonicalFilePath = await Deno.realPath(file);
+    const rel = relative(canonicalJailPath, canonicalFilePath);
+    const outsideJail = rel.startsWith('..') || isAbsolute(rel);
+
+    if (outsideJail) {
       return new Error('Attempt to read outside the permitted path.');
     }
   }

@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertMatch, assertRejects } from '@std/assert';
+import { isAbsolute } from '@std/path';
 import { computeHash } from './mod.ts';
 
 Deno.test('returns a 64-char hex hash (metadata mode)', async () => {
@@ -31,6 +32,18 @@ Deno.test('files: true returns an array of .ts paths', async () => {
   assert(Array.isArray(result));
   assert((result as string[]).length > 0);
   assert((result as string[]).every((f) => f.endsWith('.ts')));
+});
+
+Deno.test('files: true returns paths relative to jail', async () => {
+  const result = await computeHash({
+    include: ['src/**/*.ts'],
+    files: true,
+    jail: './src',
+  }) as string[];
+
+  assert(result.length > 0);
+  assert(result.every((f) => !isAbsolute(f)));
+  assert(result.every((f) => !f.startsWith('..')));
 });
 
 Deno.test('exclude removes files from the result', async () => {
