@@ -1,5 +1,5 @@
 import { expandGlob } from '@std/fs';
-import { isAbsolute, relative, resolve } from '@std/path';
+import { isAbsolute, relative, resolve, SEPARATOR } from '@std/path';
 
 /**
  * Resolves an array of glob patterns to a deduplicated list of absolute
@@ -23,46 +23,57 @@ export const resolveGlobs = async (globs: string[]): Promise<string[]> => {
 };
 
 /**
+ * Returns `file` relative to `jailPath`, always using forward slashes so the
+ * result is identical on every platform.
+ *
+ * @param {string} jailPath - Absolute path to the jail root.
+ * @param {string} file - Absolute file path inside the jail.
+ *
+ * @returns {string} The relative, slash-separated path.
+ */
+export const relativePath = (jailPath: string, file: string): string => relative(jailPath, file).replaceAll(SEPARATOR, '/');
+
+/** Hex-encodes a digest. */
+const toHex = (buffer: ArrayBuffer): string =>
+  Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+/**
  * Computes a SHA-256 hash over an array of files.
  *
- * In metadata mode (`useContent = false`), hashes `path + dev + ino + size + mtime`
+ * Every file is digested on its own and folded into a `<path> <digest>` line;
+ * the returned hash is the digest over those lines. Including the path makes
+ * renames visible, and the per-file digest keeps file boundaries unambiguous.
+ *
+ * In metadata mode (`useContent = false`), hashes `dev + ino + size + mtime`
  * per file (fast). In content mode (`useContent = true`), reads and hashes
  * full file bytes (accurate).
  *
- * To keep memory bounded for large file sets, this computes a per-file
- * digest and folds it into a fixed-size rolling digest.
- *
  * @param {string[]} files - Absolute file paths to hash.
+ * @param {string} jailPath - Absolute path to the jail root, used to relativize paths.
  * @param {boolean} useContent - Whether to hash file content (true) or metadata (false).
  *
- * @returns {string} A 64-character lowercase hex string.
+ * @returns {Promise<string>} A 64-character lowercase hex string.
  */
-export const hashFiles = async (files: string[], useContent: boolean): Promise<string> => {
+export const hashFiles = async (files: string[], jailPath: string, useContent: boolean): Promise<string> => {
   const encoder = new TextEncoder();
-  let rolling = new Uint8Array(32);
+  const lines: string[] = [];
 
   for (const file of files) {
-    let fileDigestBytes: Uint8Array;
-
+    let body: Uint8Array<ArrayBuffer>;
     if (useContent) {
-      const content = await Deno.readFile(file);
-      fileDigestBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', content));
+      // ponytail: reads one whole file into memory; @std/crypto digests an AsyncIterable if single files ever outgrow RAM.
+      body = await Deno.readFile(file);
     } else {
       const stat = await Deno.stat(file);
-      const meta = `${file}-${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0}`;
-      fileDigestBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(meta)));
+      body = encoder.encode(`${stat.dev ?? 0}-${stat.ino ?? 0}-${stat.size}-${stat.mtime?.getTime() ?? 0}`);
     }
 
-    // Keep memory bounded by folding each file hash into a fixed-size rolling digest.
-    const combined = new Uint8Array(rolling.length + fileDigestBytes.length);
-    combined.set(rolling, 0);
-    combined.set(fileDigestBytes, rolling.length);
-    rolling = new Uint8Array(await crypto.subtle.digest('SHA-256', combined));
+    lines.push(`${relativePath(jailPath, file)} ${toHex(await crypto.subtle.digest('SHA-256', body))}`);
   }
 
-  return Array.from(rolling)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  return toHex(await crypto.subtle.digest('SHA-256', encoder.encode(lines.join('\n'))));
 };
 
 /**
@@ -70,24 +81,21 @@ export const hashFiles = async (files: string[], useContent: boolean): Promise<s
  * Returns an `Error` for the first violation, or `undefined` if all paths
  * are safe.
  *
- * @param {string[]} files - Absolute file paths to check.
- * @param {string} jailPath - Absolute path to the jail root. If falsy, no check is performed.
+ * Both sides are canonicalized first, so a symlink cannot point out of the jail
+ * and a symlinked jail root does not produce false positives.
  *
- * @returns {Error | undefined} An `Error` if any file is outside the jail, or `undefined` if all are safe.
+ * @param {string[]} files - Absolute file paths to check.
+ * @param {string} jailPath - Absolute path to the jail root.
+ *
+ * @returns {Promise<Error | undefined>} An `Error` if any file is outside the jail, or `undefined` if all are safe.
  */
 export const jail = async (files: string[], jailPath: string): Promise<Error | undefined> => {
-  if (!jailPath) {
-    return;
-  }
-
   const canonicalJailPath = await Deno.realPath(jailPath);
 
   for (const file of files) {
-    const canonicalFilePath = await Deno.realPath(file);
-    const rel = relative(canonicalJailPath, canonicalFilePath);
-    const outsideJail = rel.startsWith('..') || isAbsolute(rel);
-
-    if (outsideJail) {
+    // On Windows `relative()` returns an absolute path across drive boundaries, which never starts with '..'.
+    const rel = relative(canonicalJailPath, await Deno.realPath(file));
+    if (rel.startsWith('..') || isAbsolute(rel)) {
       return new Error('Attempt to read outside the permitted path.');
     }
   }

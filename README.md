@@ -45,11 +45,14 @@ console.log(files); // ["src/mod.ts", "src/types.ts", "src/utils.ts"]
 
 ## API
 
-### `computeHash(options: IOptions): Promise<string | string[]>`
+### `computeHash(options: IOptions): Promise<string>`
+
+### `computeHash(options: IOptions & { files: true }): Promise<string[]>`
 
 Resolves all include globs, removes exclude matches, deduplicates, verifies the
-optional jail constraint, sorts deterministically, then either returns the
-matched file paths or a hex-encoded SHA-256 hash.
+jail constraint, sorts deterministically, then either returns the matched file
+paths or a hex-encoded SHA-256 hash. The return type follows `options.files`, so
+no cast is needed at the call site.
 
 ### Options
 
@@ -63,11 +66,21 @@ matched file paths or a hex-encoded SHA-256 hash.
 
 ### Notes
 
+- Each file is digested on its own and folded into a `<relative path> <digest>`
+  line; the returned hash is the digest over those lines. That makes renames
+  visible and keeps file boundaries unambiguous. Paths always use forward
+  slashes, so the hash is stable across platforms.
 - **Metadata mode** hashes `dev + ino + size + mtime` per file. Fast because no
   file content is read. On **Windows**, `dev` and `ino` are always `0`, so the
-  hash reflects `size + mtime` only.
+  hash reflects `size + mtime` only. Because `dev`/`ino`/`mtime` differ per
+  machine and per checkout, a metadata hash is only comparable on the machine
+  that produced it — use `content: true` for a key shared across machines or CI
+  runners.
 - **Content mode** reads every matched file in full — reliable for detecting
   byte-level changes regardless of filesystem metadata.
+- The `jail` check canonicalizes both the jail root and every matched file
+  (`Deno.realPath`), so a symlink cannot escape the jail and a symlinked jail
+  root does not cause false positives.
 - All hashes are SHA-256, returned as 64-character lowercase hex strings (via
   the built-in
   [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)).

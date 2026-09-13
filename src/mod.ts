@@ -1,8 +1,29 @@
-import { relative, resolve } from '@std/path';
-import { hashFiles, jail, resolveGlobs } from './utils.ts';
+import { resolve } from '@std/path';
+import { hashFiles, jail, relativePath, resolveGlobs } from './utils.ts';
 import type { IOptions } from './types.ts';
 
 export type { IOptions } from './types.ts';
+
+/**
+ * Computes a SHA-256 hash for all files matched by the provided glob patterns.
+ *
+ * @param {IOptions} options - See {@linkcode IOptions}.
+ *
+ * @returns {Promise<string>} A 64-character hex hash string.
+ * @throws {Error} If any glob pattern is invalid, if file system access fails, if any file is outside the jail, or if no files are matched.
+ */
+export function computeHash(options: IOptions & { files?: false }): Promise<string>;
+
+/**
+ * Returns the list of files matched by the provided glob patterns, relative to
+ * `jail` and sorted deterministically.
+ *
+ * @param {IOptions} options - See {@linkcode IOptions}.
+ *
+ * @returns {Promise<string[]>} The matched file paths, relative to `jail`.
+ * @throws {Error} If any glob pattern is invalid, if file system access fails, if any file is outside the jail, or if no files are matched.
+ */
+export function computeHash(options: IOptions & { files: true }): Promise<string[]>;
 
 /**
  * Computes a SHA-256 hash (or returns a file list) for all files matched by
@@ -17,7 +38,7 @@ export type { IOptions } from './types.ts';
  *   (relative to `jail`) when `options.files` is `true`.
  * @throws {Error} If any glob pattern is invalid, if file system access fails, if any file is outside the jail, or if no files are matched.
  */
-export const computeHash = async (options: IOptions): Promise<string | string[]> => {
+export async function computeHash(options: IOptions): Promise<string | string[]> {
   const jailPath = resolve(options.jail ?? '.');
 
   const includes = await resolveGlobs(options.include);
@@ -38,9 +59,8 @@ export const computeHash = async (options: IOptions): Promise<string | string[]>
   files.sort();
 
   if (options.files) {
-    // Return paths relative to the jail root.
-    return files.map((file) => relative(jailPath, file));
+    return files.map((file) => relativePath(jailPath, file));
   }
 
-  return await hashFiles(files, options.content ?? false);
-};
+  return await hashFiles(files, jailPath, options.content ?? false);
+}
