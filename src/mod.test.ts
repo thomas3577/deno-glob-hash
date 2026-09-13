@@ -49,7 +49,8 @@ Deno.test('files: true returns paths relative to the jail', async () => {
 });
 
 Deno.test('files: true honours a custom jail root', async () => {
-  const result = await computeHash({ include: ['src/**/*.ts'], files: true, jail: './src' });
+  // Patterns resolve against the jail, so this matches src/*.ts without naming src/.
+  const result = await computeHash({ include: ['**/*.ts'], files: true, jail: './src' });
 
   assert(result.length > 0);
   assert(result.every((f) => !isAbsolute(f) && !f.startsWith('..')));
@@ -72,12 +73,43 @@ Deno.test('throws when no files match', async () => {
 });
 
 Deno.test('throws on jail violation', async () => {
-  // deno.json is in the repo root; jailing to src/ should trigger an error.
+  // A pattern that climbs out of the jail is still caught by the post-check.
   await assertRejects(
-    () => computeHash({ include: ['deno.json'], jail: './src' }),
+    () => computeHash({ include: ['../deno.json'], jail: './src' }),
     Error,
     'outside the permitted path',
   );
+});
+
+Deno.test('an escaping pattern is rejected before the filesystem is walked', async () => {
+  for (const pattern of ['../**/*.md', '../../**', 'src/../../**']) {
+    const started = performance.now();
+    await assertRejects(
+      () => computeHash({ include: [pattern], files: true }),
+      Error,
+      'points outside the permitted path',
+    );
+    // A walk of the parent tree would take orders of magnitude longer than this.
+    assert(performance.now() - started < 250, `${pattern} appears to have walked the filesystem`);
+  }
+});
+
+Deno.test('a pattern naming a path outside the jail matches nothing', async () => {
+  // Patterns resolve against the jail, so deno.json in the repo root is simply not there.
+  await assertRejects(
+    () => computeHash({ include: ['deno.json'], jail: './src' }),
+    Error,
+    'No files were matched',
+  );
+});
+
+Deno.test('exclude is applied while walking, not afterwards', async () => {
+  const all = await computeHash({ include: ['**/*.ts'], files: true, jail: './src' });
+  const some = await computeHash({ include: ['**/*.ts'], exclude: ['utils.ts'], files: true, jail: './src' });
+
+  assert(all.includes('utils.ts'));
+  assert(!some.includes('utils.ts'));
+  assertEquals(some.length, all.length - 1);
 });
 
 Deno.test('content hash respects file boundaries', async () => {

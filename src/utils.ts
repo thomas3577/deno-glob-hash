@@ -2,19 +2,76 @@ import { expandGlob } from '@std/fs';
 import { isAbsolute, relative, resolve, SEPARATOR } from '@std/path';
 
 /**
- * Resolves an array of glob patterns to a deduplicated list of absolute
- * file paths.
+ * Whether `target` lies outside `base`.
+ *
+ * On Windows `relative()` returns an absolute path across drive boundaries,
+ * which never starts with '..', so both shapes have to be checked.
+ */
+const escapes = (base: string, target: string): boolean => {
+  const rel = relative(base, target);
+  return rel.startsWith('..') || isAbsolute(rel);
+};
+
+/**
+ * Throws if a glob pattern points outside `jailPath`.
+ *
+ * Glob metacharacters only ever match *below* the point they appear, so
+ * resolving the raw pattern against the jail and comparing prefixes is enough
+ * to decide this without touching the filesystem. Doing it up front is the
+ * point: an escaping pattern would otherwise walk the tree it is not allowed
+ * to read before the per-file check ever runs.
+ *
+ * @param {string[]} globs - The glob patterns to check.
+ * @param {string} jailPath - Absolute path to the jail root.
+ *
+ * @throws {Error} If any pattern resolves outside the jail.
+ */
+export const assertPatternsInJail = (globs: string[], jailPath: string): void => {
+  for (const glob of globs) {
+    if (escapes(jailPath, resolve(jailPath, glob))) {
+      throw new Error(`Glob pattern points outside the permitted path: ${glob}`);
+    }
+  }
+};
+
+/**
+ * Whether a symlink resolves to a regular file. A broken link counts as absent
+ * rather than as an error, so one dangling link does not fail the whole run.
+ */
+const pointsToFile = async (path: string): Promise<boolean> => {
+  try {
+    return (await Deno.stat(path)).isFile;
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      return false;
+    }
+    throw error;
+  }
+};
+
+/**
+ * Resolves an array of glob patterns to a list of absolute file paths.
+ *
+ * Relative patterns resolve against `root` rather than the working directory,
+ * which keeps an ordinary pattern inside the jail instead of letting it walk
+ * the filesystem before the jail check runs.
+ *
+ * Symlinks pointing at files are included; symlinked *directories* are never
+ * traversed, because `walk()` does not track visited paths and a link cycle
+ * would not terminate.
  *
  * @param {string[]} globs - An array of glob patterns to resolve.
+ * @param {string} root - Absolute path that relative patterns resolve against.
+ * @param {string[]} exclude - Glob patterns to skip while walking.
  *
  * @returns {Promise<string[]>} A promise that resolves to an array of absolute file paths.
  * @throws {Error} If any glob pattern is invalid or if file system access fails.
  */
-export const resolveGlobs = async (globs: string[]): Promise<string[]> => {
+export const resolveGlobs = async (globs: string[], root: string, exclude: string[]): Promise<string[]> => {
   const files: string[] = [];
-  for (const g of globs) {
-    for await (const entry of expandGlob(g, { globstar: true })) {
-      if (entry.isFile) {
+  for (const glob of globs) {
+    for await (const entry of expandGlob(glob, { globstar: true, root, exclude })) {
+      if (entry.isFile || (entry.isSymlink && await pointsToFile(entry.path))) {
         files.push(resolve(entry.path));
       }
     }
@@ -77,9 +134,7 @@ export const hashFiles = async (files: string[], jailPath: string, useContent: b
 };
 
 /**
- * Checks that every file path lies within `jailPath`.
- * Returns an `Error` for the first violation, or `undefined` if all paths
- * are safe.
+ * Throws if any file lies outside `jailPath`.
  *
  * Both sides are canonicalized first, so a symlink cannot point out of the jail
  * and a symlinked jail root does not produce false positives.
@@ -87,16 +142,14 @@ export const hashFiles = async (files: string[], jailPath: string, useContent: b
  * @param {string[]} files - Absolute file paths to check.
  * @param {string} jailPath - Absolute path to the jail root.
  *
- * @returns {Promise<Error | undefined>} An `Error` if any file is outside the jail, or `undefined` if all are safe.
+ * @throws {Error} If any file resolves outside the jail.
  */
-export const jail = async (files: string[], jailPath: string): Promise<Error | undefined> => {
+export const assertInJail = async (files: string[], jailPath: string): Promise<void> => {
   const canonicalJailPath = await Deno.realPath(jailPath);
 
   for (const file of files) {
-    // On Windows `relative()` returns an absolute path across drive boundaries, which never starts with '..'.
-    const rel = relative(canonicalJailPath, await Deno.realPath(file));
-    if (rel.startsWith('..') || isAbsolute(rel)) {
-      return new Error('Attempt to read outside the permitted path.');
+    if (escapes(canonicalJailPath, await Deno.realPath(file))) {
+      throw new Error(`Attempt to read outside the permitted path: ${file}`);
     }
   }
 };
