@@ -64,26 +64,41 @@ no cast is needed at the call site.
 | `files`   | `boolean`  | `false` | Return matched file paths (relative to `jail`) instead of a hash.                |
 | `content` | `boolean`  | `false` | Hash file **contents** instead of metadata. More accurate, but reads every file. |
 
+## Hash format
+
+The exact construction is **part of the public API**. Changing it changes every
+hash this package has ever returned, so it only changes in a major release.
+
+Matched files are sorted by absolute path. Each file becomes one line:
+
+```text
+<path relative to jail, forward slashes> <SHA-256 of the file's body, lowercase hex>
+```
+
+where _body_ is the raw file bytes in content mode, and the UTF-8 string
+`` `${dev}-${ino}-${size}-${mtime}` `` in metadata mode. Those lines are joined
+with `\n` and the result is the SHA-256 of that string, as lowercase hex.
+
+Including the path means a rename changes the hash; hashing each file
+separately means file boundaries are unambiguous, so `"ab" + "c"` and
+`"a" + "bc"` do not collide.
+
 ### Notes
 
-- Each file is digested on its own and folded into a `<relative path> <digest>`
-  line; the returned hash is the digest over those lines. That makes renames
-  visible and keeps file boundaries unambiguous. Paths always use forward
-  slashes, so the hash is stable across platforms.
-- **Metadata mode** hashes `dev + ino + size + mtime` per file. Fast because no
-  file content is read. On **Windows**, `dev` and `ino` are always `0`, so the
-  hash reflects `size + mtime` only. Because `dev`/`ino`/`mtime` differ per
-  machine and per checkout, a metadata hash is only comparable on the machine
-  that produced it — use `content: true` for a key shared across machines or CI
-  runners.
+- **Metadata mode** is fast because no file content is read. On **Windows**,
+  `dev` and `ino` are always `0`, so the hash reflects `size + mtime` only.
+  Because `dev`/`ino`/`mtime` differ per machine and per checkout, a metadata
+  hash is only comparable on the machine that produced it — use `content: true`
+  for a key shared across machines or CI runners.
 - **Content mode** reads every matched file in full — reliable for detecting
   byte-level changes regardless of filesystem metadata.
-- The `jail` check canonicalizes both the jail root and every matched file
-  (`Deno.realPath`), so a symlink cannot escape the jail and a symlinked jail
-  root does not cause false positives.
-- All hashes are SHA-256, returned as 64-character lowercase hex strings (via
-  the built-in
-  [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)).
+- `jail` guards against glob patterns that reach outside a directory you meant
+  to stay in — useful when the patterns come from a config file or any other
+  input you do not control. Both the jail root and every matched file are
+  canonicalized (`Deno.realPath`), so a symlink cannot escape the jail and a
+  symlinked jail root does not cause false positives.
+- All hashes are SHA-256, computed with the built-in
+  [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API).
 - No third-party dependencies — only `@std/fs` and `@std/path` from the Deno
   standard library.
 

@@ -1,3 +1,31 @@
+/**
+ * Compute a SHA-256 hash from the files matched by a set of glob patterns.
+ *
+ * Useful as a cache key: hash a source tree once, compare it later to decide
+ * whether anything needs rebuilding. Metadata mode (the default) derives the
+ * key from `stat()` alone and never reads file content; content mode reads
+ * every byte and is comparable across machines.
+ *
+ * ```ts
+ * import { computeHash } from '@dx/glob-hash';
+ *
+ * // Fast: derived from size and mtime, valid on this machine only.
+ * const key = await computeHash({ include: ['src/**'] });
+ *
+ * // Portable: derived from file content.
+ * const portable = await computeHash({ include: ['src/**'], content: true });
+ *
+ * // The matched files instead of a hash.
+ * const files = await computeHash({ include: ['src/**'], exclude: ['src/*.test.ts'], files: true });
+ * ```
+ *
+ * The hash covers each file's path relative to `jail` as well as its body, so
+ * renames are visible and file boundaries cannot collide. See the README for
+ * the exact construction — it is part of the public API.
+ *
+ * @module
+ */
+
 import { resolve } from '@std/path';
 import { hashFiles, jail, relativePath, resolveGlobs } from './utils.ts';
 import type { IOptions } from './types.ts';
