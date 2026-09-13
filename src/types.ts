@@ -5,8 +5,11 @@ export interface IOptions {
   /** Glob patterns for files to exclude. */
   exclude?: string[];
   /**
-   * Restrict file access to this directory.
-   * Throws if any matched file resolves outside this path.
+   * Restrict file access to this directory, and resolve relative patterns
+   * against it.
+   *
+   * A pattern that points outside is rejected before the filesystem is walked,
+   * and any file that still resolves outside — through a symlink, say — throws.
    * Defaults to the current working directory (`"."`).
    */
   jail?: string;
