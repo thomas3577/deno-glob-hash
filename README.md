@@ -49,10 +49,11 @@ console.log(files); // ["src/mod.ts", "src/types.ts", "src/utils.ts"]
 
 ### `computeHash(options: IOptions & { files: true }): Promise<string[]>`
 
-Resolves all include globs, removes exclude matches, deduplicates, verifies the
-jail constraint, sorts deterministically, then either returns the matched file
-paths or a hex-encoded SHA-256 hash. The return type follows `options.files`, so
-no cast is needed at the call site.
+Checks the include patterns against the jail, walks them once while skipping
+exclude matches, deduplicates, verifies that every matched file is still inside
+the jail, sorts deterministically, then either returns the matched file paths or
+a hex-encoded SHA-256 hash. The return type follows `options.files`, so no cast
+is needed at the call site.
 
 ### Options
 
@@ -60,7 +61,7 @@ no cast is needed at the call site.
 | --------- | ---------- | ------- | -------------------------------------------------------------------------------- |
 | `include` | `string[]` | —       | Glob patterns for files to hash. **Required.**                                   |
 | `exclude` | `string[]` | `[]`    | Glob patterns for files to exclude.                                              |
-| `jail`    | `string`   | `"."`   | Restrict access to this directory. Throws if any matched file is outside.        |
+| `jail`    | `string`   | `"."`   | Directory that patterns resolve against and may not leave. Throws otherwise.     |
 | `files`   | `boolean`  | `false` | Return matched file paths (relative to `jail`) instead of a hash.                |
 | `content` | `boolean`  | `false` | Hash file **contents** instead of metadata. More accurate, but reads every file. |
 
@@ -92,11 +93,16 @@ separately means file boundaries are unambiguous, so `"ab" + "c"` and
   for a key shared across machines or CI runners.
 - **Content mode** reads every matched file in full — reliable for detecting
   byte-level changes regardless of filesystem metadata.
-- `jail` guards against glob patterns that reach outside a directory you meant
-  to stay in — useful when the patterns come from a config file or any other
-  input you do not control. Both the jail root and every matched file are
-  canonicalized (`Deno.realPath`), so a symlink cannot escape the jail and a
-  symlinked jail root does not cause false positives.
+- `jail` is both the base that relative patterns resolve against and the
+  boundary they may not cross — useful when the patterns come from a config
+  file or any other input you do not control. A pattern that points outside is
+  rejected **before** anything is read, so an escaping pattern cannot walk a
+  tree it is barred from. Files that slip past that — through a symlink — are
+  caught by a second check that canonicalizes both sides with `Deno.realPath`,
+  which also means a symlinked jail root causes no false positives.
+- Symlinks pointing at files are followed and hashed. Symlinked _directories_
+  are never traversed: `walk()` keeps no record of visited paths, so a link
+  cycle would not terminate.
 - All hashes are SHA-256, computed with the built-in
   [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API).
 - No third-party dependencies — only `@std/fs` and `@std/path` from the Deno

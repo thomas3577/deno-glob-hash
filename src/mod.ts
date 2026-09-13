@@ -27,7 +27,7 @@
  */
 
 import { resolve } from '@std/path';
-import { hashFiles, jail, relativePath, resolveGlobs } from './utils.ts';
+import { assertInJail, assertPatternsInJail, hashFiles, relativePath, resolveGlobs } from './utils.ts';
 import type { IOptions } from './types.ts';
 
 export type { IOptions } from './types.ts';
@@ -69,16 +69,12 @@ export function computeHash(options: IOptions & { files: true }): Promise<string
 export async function computeHash(options: IOptions): Promise<string | string[]> {
   const jailPath = resolve(options.jail ?? '.');
 
-  const includes = await resolveGlobs(options.include);
-  const excludes = new Set(await resolveGlobs(options.exclude ?? []));
+  // Checked before walking: an escaping pattern must not read the tree it is barred from.
+  assertPatternsInJail(options.include, jailPath);
 
-  // Deduplicate and apply excludes.
-  const files = [...new Set(includes.filter((f) => !excludes.has(f)))];
+  const files = [...new Set(await resolveGlobs(options.include, jailPath, options.exclude ?? []))];
 
-  const jailError = await jail(files, jailPath);
-  if (jailError) {
-    throw jailError;
-  }
+  await assertInJail(files, jailPath);
 
   if (files.length === 0) {
     throw new Error('No files were matched using the provided globs.');
